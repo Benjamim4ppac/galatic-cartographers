@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mars Survival Guide · Candor Chasma</title>
+    <meta name="description" content="Navegação de superfície em Candor Chasma, Marte. Planejamento de rotas, terreno real e análise de recursos para a missão.">
+    <!-- Tudo local: abre direto do disco, sem internet (só o mosaico de fundo é baixado) -->
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+    <link rel="stylesheet" href="css/tailwind.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/navigation.css">
+    <link rel="stylesheet" href="css/superpower.css">
+</head>
+<body>
+    <a class="skip-link" href="#mars-map">Ir para o mapa</a><a class="skip-link" href="#operations-panel">Ir para a missão</a>
+<header class="mission-header">
+        <a href="#mars-map" class="mission-brand"><span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M3 6l10 7-2 8 7 16M9 3l11 9-3 10 8 15M25 3l-2 9 7 8-1 8 8 5M32 3l-2 9 7 8"/><path d="M5 32l8-4 7 1 5-9 10-6" stroke="#d49265"/><circle cx="5" cy="32" r="2" fill="#d49265" stroke="none"/><circle cx="35" cy="14" r="2" fill="#d49265" stroke="none"/></svg></span><span>MARS SURVIVAL GUIDE<small>EXPLORAÇÃO DE SUPERFÍCIE / CANDOR OESTE</small></span></a>
+        <nav class="page-navigation" aria-label="Acesso aos instrumentos"><button data-workspace="layers" data-panel="cartography-panel" aria-expanded="false" aria-controls="cartography-panel" aria-keyshortcuts="Alt+C" title="Camadas (Alt+C)"><svg class="menu-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="m3 7 7-4 7 4-7 4Z M3 10l7 4 7-4 M3 13l7 4 7-4"/></svg>Camadas <kbd>Alt+C</kbd></button><button data-workspace="mission" data-panel="operations-panel" aria-expanded="false" aria-controls="operations-panel" aria-keyshortcuts="Alt+M" title="Missão (Alt+M)"><svg class="menu-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m12.5 7.5-1.2 3.8-3.8 1.2 1.2-3.8Z"/></svg>Missão <kbd>Alt+M</kbd></button><button data-workspace="route" aria-controls="workspace-route">Testar rota <kbd>M</kbd></button></nav>
+        <div class="system-state"><i></i> OPERAÇÃO OFFLINE <span>237 × 237 KM</span></div>
+    </header>
+    <dialog id="cartography-panel" class="floating-panel" tabindex="-1" aria-label="Camadas e dados do mapa" hidden>
+        <div class="panel-heading"><span class="section-number">01</span><h2>Camadas do mapa</h2><button class="close-panel" data-close-panel="cartography-panel" aria-label="Fechar camadas">×</button></div>
+        <div class="layer-content"><section id="workspace-layers" aria-label="Camadas do terreno"><div>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Camadas</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="bg-fuchsia-950/20 border border-fuchsia-500/40 p-2.5 rounded text-xs">
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <div>
+                                <div class="font-bold text-fuchsia-200 text-xs">Restrições de rota</div>
+                                <div class="text-[11px] text-slate-400">Declividade real (QGIS) + paredes + geologia</div>
+                            </div>
+                            <input type="checkbox" id="toggle-slope" checked class="accent-fuchsia-400 w-4 h-4">
+                        </label>
+                        <div class="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] font-['JetBrains_Mono']">
+                            <span class="flex items-center gap-1"><i class="w-3 h-3 rounded-sm border border-white/40 bg-transparent inline-block shrink-0"></i>Segura (custo 1×)</span>
+                            <span class="flex items-center gap-1"><i class="w-3 h-3 rounded-sm inline-block shrink-0" style="background:#9333ea"></i>Declividade alta: bloqueio</span>
+                            <span class="flex items-center gap-1"><i class="w-3 h-3 rounded-sm inline-block shrink-0" style="background:#f472b6"></i><span id="leg-media">Declividade média</span></span>
+                            <span class="flex items-center gap-1"><i class="w-3 h-3 rounded-sm inline-block shrink-0" style="background:#fb923c"></i><span id="leg-desab">Zona de desabamento</span></span>
+                            <span class="flex items-center gap-1"><i class="w-3 h-3 rounded-sm inline-block shrink-0" style="background:#facc15"></i><span id="leg-caot">Terreno caótico</span></span>
+                        </div>
+                    </div>
+
+                    <label class="flex items-center justify-between bg-cyan-950/30 border border-cyan-500/40 p-2.5 rounded cursor-pointer hover:bg-cyan-950/50 transition">
+                        <div>
+                            <div class="font-bold text-cyan-300 text-xs">Geologia e água (USGS I-897)</div>
+                            <div class="text-[11px] text-slate-400">Ative a camada e inspecione o mapa com Enter</div>
+                        </div>
+                        <input type="checkbox" id="toggle-hydro" class="accent-cyan-400 w-4 h-4">
+                    </label>
+
+                    <div id="hydro-legend" style="display:none" class="bg-slate-900/95 border border-slate-800 rounded-md overflow-hidden">
+                        <div class="bg-slate-800/80 px-3 py-1 flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                            <span>Unidade</span><span>Potencial de água</span>
+                        </div>
+                        <div id="hydro-legend-body" class="divide-y divide-slate-800/70 max-h-44 overflow-y-auto px-2 py-1"></div>
+                        <div id="unit-detail-box" class="hidden bg-slate-950/95 border-t border-cyan-500/40 p-2.5 text-xs space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span id="unit-detail-title" class="font-bold text-cyan-300">—</span>
+                                <button id="close-unit-detail" class="text-slate-400 hover:text-white font-bold px-1">✕</button>
+                            </div>
+                            <div id="unit-detail-mineral" class="text-[11px] text-amber-300 font-['JetBrains_Mono']"></div>
+                            <p id="unit-detail-desc" class="text-[11px] text-slate-300 leading-relaxed"></p>
+                            <div id="unit-detail-extract" class="text-[10px] text-slate-400 pt-1 border-t border-slate-800"></div>
+                        </div>
+                    </div>
+
+                    <label class="flex items-center justify-between bg-slate-900/60 border border-slate-800 p-2 rounded cursor-pointer hover:border-slate-700 text-xs">
+                        <div>
+                            <div class="font-medium text-slate-200">Missão no mapa</div>
+                            <div class="text-[10px] text-slate-400">Base, alvo de água e rota</div>
+                        </div>
+                        <input type="checkbox" id="toggle-targets" checked class="accent-cyan-400 w-4 h-4">
+                    </label>
+
+                    <div class="bg-slate-900/60 border border-slate-800 p-2 rounded text-xs">
+                        <label class="flex items-center justify-between cursor-pointer hover:text-white">
+                            <div>
+                                <div class="font-medium text-slate-200">Temperatura estimada</div>
+                                <div class="text-[10px] text-slate-400">Calculada pela altitude e latitude (modelo)</div>
+                            </div>
+                            <input type="checkbox" id="toggle-thermal" class="accent-cyan-400 w-4 h-4">
+                        </label>
+                        <div id="thermal-legend" class="hidden mt-2">
+                            <div class="h-2 rounded" style="background: linear-gradient(to right, #2563eb 0%, #06b6d4 36%, #facc15 64%, #ef4444 100%);"></div>
+                            <div class="flex justify-between mt-1 text-[10px] text-slate-400 font-['JetBrains_Mono']"><span>-60°C</span><span>-5°C</span></div>
+                        </div>
+                    </div>
+
+                    <div class="pt-1 grid grid-cols-3 gap-2 text-center">
+                        <label class="bg-slate-900 border border-slate-800 p-1.5 rounded cursor-pointer hover:border-cyan-500/40">
+                            <input type="radio" name="baseLayer" value="imagem" checked class="accent-cyan-400 block mx-auto mb-1"><span class="text-[11px]">Imagem real</span>
+                        </label>
+                        <label class="bg-slate-900 border border-slate-800 p-1.5 rounded cursor-pointer hover:border-cyan-500/40">
+                            <input type="radio" name="baseLayer" value="topo" class="accent-cyan-400 block mx-auto mb-1"><span class="text-[11px]">Topo (online)</span>
+                        </label>
+                        <label class="bg-slate-900 border border-slate-800 p-1.5 rounded cursor-pointer hover:border-cyan-500/40">
+                            <input type="radio" name="baseLayer" value="mola" class="accent-cyan-400 block mx-auto mb-1"><span class="text-[11px]">MOLA (online)</span>
+                        </label>
+                    </div>
+                </div>
+            </div></section></div><footer class="layer-provenance"><strong>Dados de terreno</strong><span>Área: 237 × 237 km · Grade: 100 m</span><span>QGIS · USGS I-897</span><span>Pacote <span id="data-pack-date">—</span></span><p>Altitude, ambiente e consumo são estimativas do modelo.</p></footer>
+    </dialog>
+    <main id="navigation" tabindex="-1" class="cartography" aria-label="Área de navegação cartográfica">
+        <div class="map-toolbar"><div class="chart-region"><span class="chart-planet" aria-hidden="true" title="Ilustração artística de Marte"><img src="assets/mars-globe.png" alt="" width="1254" height="1254"></span><div><h1 id="context-title">Candor Chasma</h1><p>Setor oeste <span aria-hidden="true">·</span> Valles Marineris</p></div></div><div class="view-switch absolute top-4 right-4 z-[1000] bg-slate-950/90 backdrop-blur-md border border-slate-800 p-1.5 rounded-lg shadow-xl flex gap-1 font-['JetBrains_Mono'] text-xs">
+            <button id="btn-view-global" class="px-3 py-1.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold transition">Imagem inteira <kbd>G</kbd></button>
+            <button id="btn-view-area" class="px-3 py-1.5 rounded text-slate-400 hover:text-white transition">Missão <kbd>F</kbd></button>
+            <button id="btn-view-local" class="px-3 py-1.5 rounded text-slate-400 hover:text-white transition">Base <kbd>L</kbd></button>
+        </div></div>
+        <div class="map-viewport">
+            <div id="mars-map" tabindex="0" role="region" aria-label="Mapa interativo de Marte" aria-describedby="map-keyboard-help"></div>
+            <div class="map-reticle" aria-hidden="true"></div>
+            <div class="map-north" aria-label="Norte">N<span></span></div>
+            <div id="offline-banner" class="hidden absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-amber-950/90 border border-amber-500/50 text-amber-200 text-xs px-4 py-2 rounded-lg shadow-xl">
+            Mosaico online indisponível sem internet. A imagem real da área, o terreno e as rotas continuam funcionando.
+        </div><div class="diagnosis-anchor absolute bottom-6 left-4 z-[1000] flex flex-col items-start gap-2">
+            <div id="mission-diagnosis-card" class="hidden w-[420px] max-w-[90vw] bg-slate-950/95 backdrop-blur-md border border-cyan-500/40 rounded-lg shadow-2xl text-slate-200">
+                <div class="flex items-center justify-between px-4 py-2.5 bg-cyan-950/60 border-b border-cyan-500/30 rounded-t-lg">
+                    <span class="text-xs font-bold uppercase tracking-wider text-cyan-300">Por que este pouso e este alvo</span>
+                    <button aria-label="Fechar diagnóstico" id="close-diagnosis-btn" class="text-slate-400 hover:text-white text-sm font-bold px-1.5">✕</button>
+                </div>
+                <div class="p-4 space-y-3 text-xs leading-relaxed max-h-[60vh] overflow-y-auto">
+                    <div class="bg-slate-900/90 border-l-2 border-red-500 pl-3 py-2 rounded-r">
+                        <div class="font-bold text-red-300 uppercase text-[10px] tracking-wider">Local de pouso</div>
+                        <p id="diag-landing-text" class="text-slate-300 mt-1">Calculando…</p>
+                    </div>
+                    <div class="bg-slate-900/90 border-l-2 border-cyan-400 pl-3 py-2 rounded-r">
+                        <div class="font-bold text-cyan-300 uppercase text-[10px] tracking-wider">Alvo de água</div>
+                        <p id="diag-water-text" class="text-slate-300 mt-1">Calculando…</p>
+                    </div>
+                    <div class="pt-2 border-t border-slate-800 text-[10px] font-['JetBrains_Mono'] text-slate-400">
+                        Terreno: declividade derivada no QGIS pela equipe. Geologia: carta USGS I-897 (McCauley, 1978). Altitudes, temperatura e consumo são estimativas do modelo.
+                    </div>
+                </div>
+            </div>
+            <button id="toggle-diagnosis-btn" title="Por que este pouso e este alvo" class="flex items-center gap-2 bg-slate-950/95 hover:bg-slate-900 border border-cyan-500/50 text-cyan-300 px-3 py-2 rounded-full shadow-xl transition text-xs font-['JetBrains_Mono'] font-bold">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span>Fundamentos da missão</span>
+            </button>
+        </div>
+        </div>
+        <div class="coordinate-strip absolute top-4 left-14 z-[1000] bg-slate-950/90 backdrop-blur-md border border-slate-800 px-4 py-2.5 rounded-lg shadow-xl">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <div class="text-[10px] uppercase tracking-widest text-cyan-400 font-bold">Valles Marineris · Elevação estimada (modelo)</div>
+            </div>
+            <div id="coords-display" class="font-['JetBrains_Mono'] text-xs text-slate-200 mt-1">Mova o mapa e pressione Enter para inspecionar</div>
+        </div>
+        <div class="map-commandbar"><div class="map-mode"><span id="map-mode-state" role="status">Inspeção de terreno</span><p id="map-keyboard-help"><kbd>WASD</kbd> mover <kbd>+ / −</kbd> zoom <kbd>Enter</kbd> inspecionar</p></div><div><button id="inspect-center">Inspecionar centro</button><button id="mark-route-point" hidden>Marcar ponto <kbd>Enter</kbd></button></div></div>
+    </main>
+    <dialog id="operations-panel" class="floating-panel" hidden tabindex="-1" aria-label="Missão ativa e planejamento de rotas">
+        <div class="panel-heading"><span class="section-number">03</span><h2>Missão ativa</h2><button class="close-panel" data-close-panel="operations-panel" aria-label="Fechar missão">×</button></div><div class="decision-line"><span class="eyebrow">PARECER DA MISSÃO</span><span id="mission-decision" role="status">—</span></div>
+        <div class="dossier-content"><section id="workspace-mission" aria-label="Missão ativa">
+                <div class="mission-sheet">
+
+                    <div class="itinerary">
+                        <button id="locate-landing" aria-label="Localizar base de pouso no mapa"><span class="stop-code">A</span><span><small>ORIGEM / POUSO</small><strong id="mission-landing-unit">—</strong></span><span class="stop-key">1 ↗</span></button>
+                        <button id="locate-target" aria-label="Localizar alvo de água no mapa"><span class="stop-code">B</span><span><small>DESTINO / ÁGUA</small><strong id="mission-target-unit">—</strong></span><span class="stop-key">2 ↗</span></button>
+                    </div>
+                    <div class="mission-headline"><span>TRAVESSIA DE IDA</span><strong id="mission-dist">—</strong></div>
+
+                    <dl class="mission-ledger">
+                        <div><dt>Ida + coleta + volta</dt><dd id="mission-time">—</dd></div>
+                        <div><dt>Desnível estimado</dt><dd id="mission-elev">—</dd></div>
+                        <div><dt>Trechos de risco</dt><dd id="mission-risk">—</dd></div>
+                        <div><dt>Bateria / ida e volta</dt><dd id="mission-energy">—</dd></div>
+                        <div><dt>O₂ / missão completa</dt><dd id="mission-o2">—</dd></div>
+                        <div><dt>Retorno a pé / falha do rover</dt><dd id="mission-walk">—</dd></div>
+                    </dl>
+                    <figure class="route-profile" aria-labelledby="profile-caption">
+                        <figcaption id="profile-caption"><span>PERFIL DA ROTA</span><span>ALTITUDE ESTIMADA / m</span></figcaption>
+                        <svg id="route-profile" viewBox="0 0 300 108" role="img" aria-labelledby="profile-title profile-description"><title id="profile-title">Perfil de altitude estimada da missão</title><desc id="profile-description">Aguardando rota.</desc></svg>
+                        <div class="profile-foot"><span>A / BASE</span><span>B / ÁGUA</span></div>
+                        <p>Modelo de altitude por unidade geológica.</p>
+                    </figure>
+                    <div class="safety-notes"><span class="eyebrow">CRITÉRIOS DE SEGURANÇA</span><ul aria-live="polite" id="mission-alerts"></ul></div>
+                </div>
+            </section><section id="workspace-route" aria-label="Rota de teste"><div class="section-intro"><h2>Rota de teste</h2><p>Compare outro percurso sem alterar a missão.</p></div><div class="border border-slate-800 rounded-lg overflow-hidden bg-slate-900/50">
+                <button id="toggle-test-route-btn" class="w-full flex items-center justify-between px-4 py-2.5 text-left bg-slate-900 hover:bg-slate-800/80 transition">
+                    <div class="flex items-center gap-2">
+                        <span class="text-cyan-400 font-bold text-sm" aria-hidden="true">↗</span>
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-200">Selecionar dois pontos</span>
+                    </div>
+                    <span id="test-route-badge" class="text-[10px] font-['JetBrains_Mono'] text-slate-400">FECHADO</span>
+                </button>
+                <div id="test-route-panel" class="hidden p-3.5 border-t border-slate-800 bg-slate-900/90">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[11px] text-slate-400">Selecione 2 pontos: clique ou Enter no centro do mapa</span>
+                        <div class="flex items-center gap-3">
+                            <span id="route-decision" class="text-[11px] font-['JetBrains_Mono'] text-slate-400">—</span>
+                            <button id="clear-route" class="text-xs text-cyan-400 hover:text-white underline">Limpar</button>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5 font-['JetBrains_Mono'] text-[11px] border-t border-slate-800 pt-2">
+                        <div class="flex justify-between"><span class="text-slate-400">Distância:</span><span id="route-dist">—</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-slate-400 shrink-0">Tempo (ida + coleta + volta):</span><span id="route-time">—</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Desnível estimado:</span><span id="route-elev">—</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-slate-400 shrink-0">Trechos de risco:</span><span id="route-risk">—</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">Bateria (ida e volta):</span><span id="route-energy">—</span></div>
+                        <div class="flex justify-between"><span class="text-slate-400">O₂ (missão completa):</span><span id="route-o2">—</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-slate-400 shrink-0">Volta a pé:</span><span id="route-walk">—</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-slate-400 shrink-0">Destino:</span><span id="route-resource">—</span></div>
+                    </div>
+                    <ul aria-live="polite" id="route-alerts" class="mt-2 pt-2 border-t border-slate-800 space-y-1 text-[11px] leading-snug"></ul>
+                </div>
+            </div></section></div>
+    </dialog>
+    <dialog id="instruments" hidden tabindex="-1" class="traverse-console floating-panel" aria-label="Simulação e telemetria"><div class="panel-heading"><span class="section-number">03</span><h2>Telemetria completa</h2><button class="close-panel" data-close-panel="instruments" aria-label="Fechar telemetria">×</button></div><div class="simulation-panel">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+
+                        <span class="text-xs font-bold uppercase tracking-wider text-amber-300">Progresso do percurso</span>
+                    </div>
+                    <span id="astro-progress-pct" class="font-['JetBrains_Mono'] text-xs font-bold text-amber-300">0%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-3">
+                    <div id="astro-progress-bar" class="h-full bg-gradient-to-r from-amber-400 to-cyan-400 transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5 mb-3 font-['JetBrains_Mono'] text-[11px]">
+                    <div class="primary-action"><button id="btn-astro-play" class="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 py-1.5 rounded font-bold transition">▶ Iniciar</button><small class="action-trust"><span aria-hidden="true">&#10003;</span> Offline simulation</small></div>
+                    <button id="btn-astro-step" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 py-1.5 rounded font-bold transition">⏭ +1 passo</button>
+                    <button id="btn-astro-reset" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 py-1.5 rounded font-bold transition">↺ Reiniciar</button>
+                </div>
+                <div class="telemetry-grid grid grid-cols-2 gap-2 font-['JetBrains_Mono'] text-[11px] bg-slate-950/80 p-2.5 rounded border border-slate-800">
+                    <div><div class="text-[9px] text-slate-400 uppercase">O₂ restante</div><div id="astro-o2" class="text-cyan-300 font-bold">—</div></div>
+                    <div><div class="text-[9px] text-slate-400 uppercase">Bateria do rover</div><div id="astro-battery" class="text-emerald-400 font-bold">—</div></div>
+                    <div><div class="text-[9px] text-slate-400 uppercase">Altitude est.</div><div id="astro-alt" class="text-amber-300 font-bold">—</div></div>
+                    <div><div class="text-[9px] text-slate-400 uppercase">Pressão est.</div><div id="astro-pressure" class="text-slate-200 font-bold">—</div></div>
+                    <div><div class="text-[9px] text-slate-400 uppercase">Temperatura est.</div><div id="astro-temp" class="text-sky-300 font-bold">—</div></div>
+                    <div><div class="text-[9px] text-slate-400 uppercase">Radiação acumulada</div><div id="astro-rad" class="text-rose-300 font-bold">—</div></div>
+                </div>
+            </div></dialog>
+
+    <footer class="flight-bar" aria-label="Controles da travessia">
+        <div class="flight-status"><span class="eyebrow">MISSÃO</span><strong data-mirror="mission-decision">—</strong></div>
+        <div class="flight-playback"><div class="primary-action"><button id="flight-play" aria-label="Iniciar ou pausar simulação">Iniciar</button><small class="action-trust"><span aria-hidden="true">&#10003;</span> Offline simulation</small></div><button id="flight-step" aria-label="Avançar um passo">+1 passo</button><button id="flight-reset" aria-label="Reiniciar simulação">↺</button></div>
+        <div class="flight-progress"><span data-mirror="astro-progress-pct">0%</span><span>DA TRAVESSIA</span></div>
+        <div class="flight-reserve"><span>O₂ RESTANTE</span><strong data-mirror="astro-o2">—</strong></div>
+        <div class="flight-reserve"><span>BATERIA</span><strong data-mirror="astro-battery">—</strong></div>
+        <button id="follow-rover" aria-pressed="true" title="Centralizar a visualização no rover durante a simulação">Seguir rover <span>ON</span></button>
+        <button data-panel="instruments" aria-expanded="false" aria-controls="instruments">Telemetria <span aria-hidden="true">↗</span></button>
+    </footer>
+
+    <dialog id="keyboard-dialog" aria-labelledby="keyboard-title">
+        <div class="dialog-heading"><span>REFERÊNCIA DE OPERAÇÃO</span><button id="close-keyboard" aria-label="Fechar atalhos">Fechar · Esc</button></div>
+        <h2 id="keyboard-title">Comando por teclado</h2>
+        <p>Tab percorre os controles. Enter ou Espaço ativa botões. Setas selecionam opções de mapa; Espaço alterna camadas.</p>
+        <dl class="shortcut-list">
+            <dt>Tab / Shift+Tab</dt><dd>Next / previous control. Enter activates buttons; Space toggles options.</dd>
+            <dt>Alt + N / Alt + T</dt><dd>Focus map / open telemetry</dd>
+            <dt>Map navigation</dt><dd>WASD, + / -, and F / G / L work from any control, except text fields. Zoom also works on the numeric keypad. Focus the map for its other shortcuts. Zoom in before panning from the full-area view.</dd>
+            <dt>W A S D / Arrow keys</dt><dd>WASD moves the map globally, except while editing text. Arrow keys move it when the map is focused.</dd>
+            <dt>+ / −</dt><dd>Aproximar / afastar</dd>
+            <dt>Enter / Espaço</dt><dd>Inspecionar o centro ou marcar ponto da rota</dd>
+            <dt>Alt + C</dt><dd>Abrir / fechar camadas</dd>
+            <dt>Alt + M</dt><dd>Abrir / fechar missão</dd>
+            <dt>G / F / L</dt><dd>Imagem da área / missão / base</dd>
+            <dt>1 / 2</dt><dd>Centralizar pouso / alvo de água</dd>
+            <dt>P / M</dt><dd>Simular / alternar teste de rota</dd>
+            <dt>V / H / I / T</dt><dd>Restrições / geologia / alvos / temperatura</dd>
+            <dt>X</dt><dd>Limpar rota de teste</dd>
+            <dt>Esc</dt><dd>Fechar menu, janela ou diagnóstico</dd>
+            <dt>?</dt><dd>Abrir esta referência</dd>
+        </dl>
+    </dialog>
+    <button id="keyboard-help" class="keyboard-help" aria-haspopup="dialog">? <span>Atalhos de teclado</span></button>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="data/parametros.js"></script>
+    <script src="data/candor_geologia.js"></script>
+    <script src="data/terreno.js"></script>
+    <script src="js/terreno.js"></script>
+    <script src="js/layers.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/interface.js"></script>
+    <script src="js/teclado.js"></script>
+    <script src="js/ambience.js"></script>
+    <script src="js/idioma.js"></script>
+</body>
+</html>
